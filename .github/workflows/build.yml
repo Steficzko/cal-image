@@ -57,6 +57,10 @@ jobs:
           jq --arg v "$NEXT_VERSION" '.resolutions += {"next": $v, "@next/bundle-analyzer": $v}' \
             src/package.json > src/package.json.new && mv src/package.json.new src/package.json
           jq .resolutions src/package.json | grep -E '"(next|@next/bundle-analyzer)"'
+          # turbo prune reads yarn.lock, so the lockfile must already carry the override.
+          cd src && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install --mode=update-lockfile
+          grep -E '^"next@' yarn.lock
+          test "$(grep -cE '^"next@' yarn.lock)" = 1
 
       - name: Free runner disk
         run: |
