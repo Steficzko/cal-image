@@ -10,6 +10,9 @@ on:
       node_image:
         description: "Node base image (pin a patched release)"
         default: "node:22.23.4"
+      next_version:
+        description: "Force this Next.js version via root resolutions (empty = upstream's pin)"
+        default: ""
   push:
     branches: [main]
     paths: [".github/workflows/build.yml"]
@@ -21,6 +24,7 @@ permissions:
 env:
   CAL_REF: ${{ inputs.cal_ref || 'v6.2.0' }}
   NODE_IMAGE: ${{ inputs.node_image || 'node:22.23.4' }}
+  NEXT_VERSION: ${{ inputs.next_version }}
   IMAGE: ghcr.io/steficzko/cal
 
 jobs:
@@ -47,6 +51,13 @@ jobs:
           grep -n '^FROM' src/Dockerfile
           ! grep -q 'node:20' src/Dockerfile
 
+      - name: Override Next.js (root resolutions; yarn install re-resolves the lockfile)
+        if: env.NEXT_VERSION != ''
+        run: |
+          jq --arg v "$NEXT_VERSION" '.resolutions += {"next": $v, "@next/bundle-analyzer": $v}' \
+            src/package.json > src/package.json.new && mv src/package.json.new src/package.json
+          jq .resolutions src/package.json | grep -E '"(next|@next/bundle-analyzer)"'
+
       - name: Free runner disk
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
@@ -60,7 +71,7 @@ jobs:
 
       - name: Build (build args as upstream's release action)
         run: |
-          TAG="${IMAGE}:${CAL_REF}-node${NODE_IMAGE#node:}"
+          TAG="${IMAGE}:${CAL_REF}-node${NODE_IMAGE#node:}${NEXT_VERSION:+-next$NEXT_VERSION}"
           docker build --network host -f src/Dockerfile src \
             --label org.opencontainers.image.source=https://github.com/${{ github.repository }} \
             --build-arg NEXT_PUBLIC_WEBAPP_URL=http://localhost:3000 \
@@ -77,6 +88,9 @@ jobs:
           v=$(docker run --rm --entrypoint node "$TAG" -v)
           echo "runtime node: $v"
           test "$v" = "v${NODE_IMAGE#node:}"
+          n=$(docker run --rm --entrypoint node -w /calcom/apps/web "$TAG" -p 'require("next/package.json").version')
+          echo "runtime next: $n"
+          test -z "$NEXT_VERSION" || test "$n" = "$NEXT_VERSION"
 
       - name: Push
         run: |
