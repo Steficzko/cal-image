@@ -61,6 +61,7 @@ jobs:
           cd src && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install --mode=update-lockfile
           grep -E '^"next@' yarn.lock
           test "$(grep -cE '^"next@' yarn.lock)" = 1
+          rm -rf .yarn/cache .yarn/install-state.gz  # keep the fetched zips out of the image (COPY .yarn)
 
       - name: Free runner disk
         run: |
